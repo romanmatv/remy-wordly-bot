@@ -1,7 +1,7 @@
 const path = require('path');
 
 module.exports = (env, argv) => ({
-  target: 'node',
+  target: 'node22', // Node.js 22.13+ (нужен встроенный node:sqlite и динамический import)
   mode: argv.mode || 'production',
   entry: './src/index.js',
   output: {
@@ -10,9 +10,12 @@ module.exports = (env, argv) => ({
     clean: true,
   },
   // встроенный модуль Node.js — подключается во время выполнения
-  externals: {
-    'node:sqlite': 'commonjs node:sqlite',
-  },
+  externals: [
+    { 'node:sqlite': 'commonjs node:sqlite' },
+    // mtcute (MTProto) — ESM-пакеты с wasm, подключаются динамически только при включённом прокси
+    ({ request }, callback) =>
+      /^@(mtcute|fuman)\//.test(request) ? callback(null, `import ${request}`) : callback(),
+  ],
   node: {
     __dirname: false,
     __filename: false,

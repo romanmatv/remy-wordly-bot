@@ -34,16 +34,25 @@ export default class Database {
     };
   }
 
+  /**
+   * Как в better-sqlite3: возвращает функцию, выполняющую fn в транзакции.
+   * Вложенные вызовы оформляются через SAVEPOINT.
+   */
   transaction(fn) {
     return (...args) => {
-      this.db.exec('BEGIN');
+      const depth = this._txDepth ?? 0;
+      const sp = `sp_${depth}`;
+      this.db.exec(depth === 0 ? 'BEGIN' : `SAVEPOINT ${sp}`);
+      this._txDepth = depth + 1;
       try {
         const res = fn(...args);
-        this.db.exec('COMMIT');
+        this.db.exec(depth === 0 ? 'COMMIT' : `RELEASE ${sp}`);
         return res;
       } catch (e) {
-        this.db.exec('ROLLBACK');
+        this.db.exec(depth === 0 ? 'ROLLBACK' : `ROLLBACK TO ${sp}; RELEASE ${sp}`);
         throw e;
+      } finally {
+        this._txDepth = depth;
       }
     };
   }

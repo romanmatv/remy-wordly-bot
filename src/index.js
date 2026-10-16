@@ -3,6 +3,8 @@ import 'dotenv/config';
 import { Bot, InlineKeyboard, GrammyError, HttpError } from 'grammy';
 import { config, CATEGORIES, GAME_TYPES, MAX_WORDS } from './config.js';
 import { openDb, seed } from './db.js';
+import { readMtprotoConfig } from './mtproto/config.js';
+import { createMtprotoBridge } from './mtproto/bridge.js';
 import { createStore } from './store.js';
 import { extractWords, escapeHtml } from './normalize.js';
 import { formatStats, formatStatsElsewhere } from './stats.js';
@@ -293,35 +295,54 @@ bot.catch((err) => {
   else console.error('Ошибка при обработке апдейта:', e);
 });
 
-const timer = setInterval(() => {
-  checkCrocTimeouts(bot.api, store).catch((e) => console.error('[croc timer]', e));
-}, config.timerIntervalMs);
+let timer = null;
+let mtprotoBridge = null;
 
 async function shutdown() {
   clearInterval(timer);
-  await bot.stop();
+  await bot.stop().catch(() => {});
+  await mtprotoBridge?.stop();
   db.close();
   process.exit(0);
 }
 process.once('SIGINT', shutdown);
 process.once('SIGTERM', shutdown);
 
-bot.api
-  .setMyCommands([
-    { command: 'startgame', description: 'Начать игру' },
-    { command: 'stopgame', description: 'Остановить текущую игру' },
-    { command: 'stat', description: 'Счёт: этот чат и другие чаты' },
-    { command: 'clearstat', description: 'Очистить счёт в этом чате' },
-    { command: 'addword', description: 'Добавить слово в словарь' },
-    { command: 'delword', description: 'Удалить слово из словаря' },
-    { command: 'help', description: 'Правила и команды' },
-  ])
-  .catch((e) => console.warn('Не удалось установить список команд:', e.message));
+async function main() {
+  // Подключение через MTProto proxy (если задан в .env)
+  const mtproto = readMtprotoConfig(process.env, config.dbPath);
+  if (mtproto) {
+    mtprotoBridge = await createMtprotoBridge({ token: config.token, mtproto });
+    // все вызовы Bot API из grammY пойдут через MTProto
+    bot.api.config.use(mtprotoBridge.transformer);
+  }
 
-// Проверим таймауты сразу после старта (бот мог быть выключен)
-checkCrocTimeouts(bot.api, store).catch(() => {});
+  await bot.api
+    .setMyCommands([
+      { command: 'startgame', description: 'Начать игру' },
+      { command: 'stopgame', description: 'Остановить текущую игру' },
+      { command: 'stat', description: 'Счёт: этот чат и другие чаты' },
+      { command: 'clearstat', description: 'Очистить счёт в этом чате' },
+      { command: 'addword', description: 'Добавить слово в словарь' },
+      { command: 'delword', description: 'Удалить слово из словаря' },
+      { command: 'help', description: 'Правила и команды' },
+    ])
+    .catch((e) => console.warn('Не удалось установить список команд:', e.message));
 
-bot.start({
-  allowed_updates: ['message', 'callback_query'],
-  onStart: (me) => console.log(`Бот @${me.username} запущен`),
+  timer = setInterval(() => {
+    checkCrocTimeouts(bot.api, store).catch((e) => console.error('[croc timer]', e));
+  }, config.timerIntervalMs);
+  // Проверим таймауты сразу после старта (бот мог быть выключен)
+  checkCrocTimeouts(bot.api, store).catch(() => {});
+
+  await bot.start({
+    allowed_updates: ['message', 'callback_query'],
+    onStart: (me) =>
+      console.log(`Бот @${me.username} запущен${mtproto ? ' (через MTProto proxy)' : ''}`),
+  });
+}
+
+main().catch((e) => {
+  console.error('Не удалось запустить бота:', e?.message ?? e);
+  process.exit(1);
 });

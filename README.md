@@ -75,6 +75,9 @@ src/
   config.js           — настройки и названия категорий
   db.js               — открытие/создание БД, схема, импорт CSV
   sqlite.js           — обёртка над node:sqlite
+  mtproto/config.js   — чтение настроек MTProto proxy из .env
+  mtproto/runtime.js  — MTProto-клиент mtcute для Node.js (без нативных модулей)
+  mtproto/bridge.js   — эмуляция методов Bot API для grammY поверх MTProto
   csv.js              — парсинг CSV
   store.js            — запросы к БД
   normalize.js        — нормализация слов (регистр, ё/е, отсечение знаков)
@@ -90,6 +93,33 @@ src/
 - `/addword` в категорию «Города» принимает до двух слов, в остальные — одно.
 - Существующая БД обновляется автоматически при запуске (версия схемы хранится в `PRAGMA user_version`).
 - `/clearstat` и `/delword` доступны любому участнику чата.
+
+## Подключение через MTProto proxy
+
+Если Telegram заблокирован, бота можно подключить через MTProto proxy (MTProxy).
+Обычный Bot API (`api.telegram.org`) работает только по HTTPS и через MTProto proxy ходить не умеет,
+поэтому при включённом прокси бот подключается к Telegram **напрямую по протоколу MTProto**
+(библиотека [mtcute](https://mtcute.dev)), а все вызовы Bot API из grammY незаметно перенаправляются
+через MTProto (`src/mtproto/bridge.js`). Логика бота при этом не меняется.
+
+Что нужно в `.env`:
+
+```ini
+# ссылка на прокси целиком…
+MTPROXY=tg://proxy?server=1.2.3.4&port=443&secret=ee0123...
+# …или по отдельности: MTPROXY_HOST / MTPROXY_PORT / MTPROXY_SECRET
+
+# api_id и api_hash приложения — https://my.telegram.org → API development tools
+TELEGRAM_API_ID=123456
+TELEGRAM_API_HASH=0123456789abcdef0123456789abcdef
+```
+
+- Поддерживаются все виды секретов: обычные, `dd…` (random padding) и `ee…` (Fake TLS), в hex или base64.
+- Сессия MTProto хранится в файле `mtproto.session` рядом с базой (в Docker — в томе `data`).
+  Её не нужно трогать; если удалить — бот просто авторизуется заново по токену.
+- Если переменные прокси не заданы, бот работает как раньше через обычный Bot API.
+- В лог при старте пишется `Бот @… запущен (через MTProto proxy)`.
+- Подробные логи MTProto: `MTCUTE_LOG_LEVEL=4` (по умолчанию выводятся только ошибки и предупреждения).
 
 ## Запуск в Docker
 
