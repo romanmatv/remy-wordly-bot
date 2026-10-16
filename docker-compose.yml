@@ -1,0 +1,29 @@
+services:
+  bot:
+    image: node:24-alpine
+    container_name: remy-wordly-bot
+    working_dir: /app
+    restart: unless-stopped
+    init: true
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      # БД хранится в именованном томе: SQLite надёжнее работает на нём,
+      # чем на примонтированной папке Windows
+      DB_PATH: /data/wordly.db
+    volumes:
+      # исходники и CSV-файлы проекта
+      - ./:/app
+      # node_modules контейнера отдельно от node_modules на хосте (Windows)
+      - node_modules:/app/node_modules
+      # база данных
+      - data:/data
+    # При каждом запуске: установка зависимостей → сборка webpack → запуск бота
+    command: >
+      sh -c "npm install --no-audit --no-fund &&
+             npm run build &&
+             exec node dist/bot.js"
+
+volumes:
+  node_modules:
+  data:

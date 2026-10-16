@@ -1,0 +1,24 @@
+{
+  "name": "remy-wordly",
+  "version": "1.0.0",
+  "description": "Telegram-бот для игр в слова: Существительные, Города, Крокодил",
+  "private": true,
+  "main": "dist/bot.js",
+  "scripts": {
+    "build": "webpack --mode production",
+    "build:dev": "webpack --mode development",
+    "start": "node dist/bot.js",
+    "dev": "webpack --mode development && node dist/bot.js"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "grammy": "^1.36.0"
+  },
+  "devDependencies": {
+    "webpack": "^5.99.0",
+    "webpack-cli": "^6.0.1"
+  }
+}
